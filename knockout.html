@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"> 
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>响应式可拖拽布局</title>
+	<link rel="stylesheet" href="http://libs.baidu.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="http://www.jq22.com/jquery/font-awesome.4.6.0.css"/>
+    <link rel="stylesheet" href="dist/gridstack.css"/>
+	<link rel="stylesheet" type="text/css" href="css/default.css">
+	<style type="text/css">
+        .grid-stack {
+            background: lightgoldenrodyellow;
+        }
+
+        .grid-stack-item-content {
+            color: #2c3e50;
+            text-align: center;
+            background-color: #18bc9c;
+        }
+        .reportDiv{
+
+        }
+        .reportDiv button{
+            position: absolute;
+            right:0px;
+        }
+    </style>
+	<!--[if IE]>
+		<script src="http://libs.baidu.com/html5shiv/3.7/html5shiv.min.js"></script>
+	<![endif]-->
+</head>
+<body>
+	<div class="jq22-container">
+	
+		<div class="jq22-content bgcolor-3">
+			<div class="container-fluid">
+		        <h1>报表展示区域</h1>
+
+                <div>
+                    <button data-bind="click: add_new_widget">添加报表</button>
+                    <button data-bind="click: save_widget">保存布局</button>
+                    <button data-bind="click: load_widget">加载布局</button>
+                </div>
+
+                <br>
+
+                <div data-bind="component: {name: 'dashboard-grid', params: $data}"></div>
+		    </div>
+	    </div>
+		
+	</div>
+	
+	<script src="http://www.jq22.com/jquery/1.11.1/jquery.min.js"></script>
+    <script src="http://libs.baidu.com/jqueryui/1.10.4/jquery-ui.min.js"></script>
+    <script src="http://libs.baidu.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <script src="js/lodash.min.js"></script>
+    <script src="js/knockout-min.js"></script>
+    <script src="dist/gridstack.js"></script>
+    <script type="text/javascript">
+        ko.components.register('dashboard-grid', {
+            viewModel: {         //声明一个对象
+                createViewModel: function (controller, componentInfo) {
+                    var ViewModel = function (controller, componentInfo) {
+                        var grid = null;
+
+                        this.widgets = controller.widgets;
+
+                        this.afterAddWidget = function (items) {
+                            if (grid == null) {
+                                grid = $(componentInfo.element).find('.grid-stack').gridstack({
+                                    auto: false
+                                }).data('gridstack');
+                            }
+
+                            var item = _.find(items, function (i) { return i.nodeType == 1 });
+                            grid.add_widget(item);
+                            ko.utils.domNodeDisposal.addDisposeCallback(item, function () {
+                                grid.remove_widget(item);
+                            });
+                        };
+                    };
+
+                    return new ViewModel(controller, componentInfo);
+                }
+            },
+            template:
+                [
+                    '<div class="grid-stack" data-bind="foreach: {data: widgets, afterRender: afterAddWidget}">',
+                    '   <div class="grid-stack-item" data-bind="attr: {\'data-gs-x\': $data.x, \'data-gs-y\': $data.y, \'data-gs-width\': $data.width, \'data-gs-height\': $data.height, \'data-gs-auto-position\': $data.auto_position}">',
+                    '       <div class="grid-stack-item-content reportDiv"><span data-bind="attr: {id: $data.reportName}"></span><button data-bind="click: $root.delete_widget">×</button></div>',
+                    '   </div>',
+                    '</div> '
+                ].join('')
+        });
+
+        $(function () {
+            var Controller = function (widgets) {
+                var self = this;
+
+                this.widgets = ko.observableArray(widgets);     //observableArray监控数组跟踪的是数组里的对象，而不是这些对象自身的状态,当数据源发生变化时，自动跟新UI
+				this.grid = $('.grid-stack').data('gridstack');
+
+                this.add_new_widget = function () {
+                    var reportName = prompt("请输入报表名称","");    //输入报表名称
+                    var repeatFlag = false;                       //重复标识
+
+                    for(var i=0;i<widgets.length;i++){
+                        if(reportName == widgets[i].reportName){
+                            repeatFlag = true;
+                            break;
+                        }
+                    }
+                    if(repeatFlag==true){   //存在重复报表名称
+                        alert("该报表名称已存在")
+                    }else if(reportName==''){
+                        alert("该报表名称不可为空")
+                    }else{
+                        this.widgets.push({
+                            x: 0,
+                            y: 0,
+                            width: 1,
+                            height: 1,
+                            auto_position: true,
+                            reportName:reportName
+                        });
+                        document.getElementById(reportName).innerHTML = reportName;
+                    }
+                    //console.log(widgets)
+                };
+
+                this.delete_widget = function (item) {
+				console.log(item,self.widgets)
+                    self.widgets.remove(item);
+                };
+                /*保存当前的报表布局模板*/
+                this.save_widget = function () {
+                    console.log('保存模板');
+					
+					var serialized_data = _.map($('.grid-stack > .grid-stack-item:visible'), function (el) {
+                        el = $(el);
+						console.log(el.context.childNodes[1].childNodes[0].innerHTML)
+                        var node = el.data('_gridstack_node');
+						var title = el.context.childNodes[1].childNodes[0].innerHTML
+						//var title = el.childNodes[1].childNodes[0].innerHTML
+						console.log(node)
+                        return {
+                            x: node.x,
+                            y: node.y,
+                            width: node.width,
+                            height: node.height,
+							reportName: title
+                        };
+                    }, this);	
+                    console.log(serialized_data);						
+                    localStorage.setItem('widgetsData',JSON.stringify(serialized_data));
+                };
+                /*加载保存好的报表布局模板*/
+                this.load_widget = function () {
+                    console.log('加载模板');
+					this.widgets.splice(0, widgets.length);  //清空之前的布局信息
+					
+                    widgets = JSON.parse(localStorage.getItem('widgetsData'));   //读取保存模板信息
+					console.log(widgets)
+					for(var i=0;i<widgets.length;i++){
+						console.log(widgets[i])
+						this.widgets.push(widgets[i]);
+						document.getElementById(widgets[i].reportName).innerHTML = widgets[i].reportName;
+					}					
+                    //console.log(this.widgets)
+				
+                };
+            };
+
+            var widgets = [
+             //  {x: 0, y: 0, width: 2, height: 2},
+             //   {x: 2, y: 0, width: 4, height: 2},
+             //   {x: 6, y: 0, width: 2, height: 4},
+             //  {x: 1, y: 2, width: 4, height: 2}
+            ];
+
+            var controller = new Controller(widgets);
+            ko.applyBindings(controller);
+        });
+    </script>
+</body>
+</html>
